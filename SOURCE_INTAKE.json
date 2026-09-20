@@ -1,0 +1,14 @@
+{
+  "schema": "axm.source-intake/v1",
+  "repository": "mike-axiom-mir/axm-gameplay-ability-fabric",
+  "donors": [{
+    "repository": "mike-axiom-mir/axm-collaboration-platform",
+    "commit": "c335244e9005df26c0edb99114164765addf6ed0",
+    "paths": [
+      "tools/gameplay-ability-rules-graph/",
+      "tools/p1-production-foundation/p1-kernel.mjs"
+    ],
+    "observed_contract": "axm.ability-rules/v1"
+  }],
+  "runtime_dependency_on_donor": false
+}
