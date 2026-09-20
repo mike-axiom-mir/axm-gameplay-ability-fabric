@@ -124,8 +124,12 @@ assert.equal(scaledCooldown.policy.cooldown, "scale");
 const tamperedTransform = structuredClone(transform);
 tamperedTransform.outputDuration = 0.7;
 assert.throws(() => validateAnimationTimeTransform(tamperedTransform), /duration mismatch|receipt mismatch/);
+
+const wrongDurationAbility = structuredClone(ability);
+wrongDurationAbility.duration = 1.0;
+wrongDurationAbility.phases.at(-1).end = 1.0;
 assert.throws(
-  () => deriveRetimedAbilityTimeline({ ...ability, duration: 1.0 }, transform, { id: "bad-duration" }),
+  () => deriveRetimedAbilityTimeline(wrongDurationAbility, transform, { id: "bad-duration" }),
   /ability duration must match/
 );
 assert.throws(() => deriveRetimedAbilityTimeline(ability, transform, { id: "arc-slash" }), /must differ/);
