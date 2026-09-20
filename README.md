@@ -12,6 +12,7 @@ Canonical outputs:
 - `axm.game-ability-cancel-decision/v1`
 - `axm.game-ability-hit-query/v1`
 - `axm.game-ability-hit-result-binding/v1`
+- `axm.game-ability-hit-consequence-batch/v1`
 
 The earlier donor contract `axm.ability-rules/v1` remains a provenance/input compatibility target.
 
@@ -32,11 +33,17 @@ The earlier donor contract `axm.ability-rules/v1` remains a provenance/input com
 - deterministic cancel decisions that emit bounded interruption requests
 - active-hitbox collision query requests with deterministic receipts
 - external collision hit/miss receipt binding without taking collision authority
+- target-specific damage/status/world-change request batches from verified hits
+- caller-owned application keys for duplicate-contact suppression across repeated samples
 - exact replay receipts
 
 Cancel windows use half-open timing (`start <= t < end`). A window may optionally declare `into: [abilityId, ...]` to restrict which follow-up abilities it authorizes. `createCancelDecision()` turns that authored policy into an inspectable deterministic decision and, when allowed, emits an `ability-interrupt` request containing the exact interruption time. Animation/VFX/audio runtimes remain responsible for realizing that request; Ability Fabric does not directly mutate them.
 
 `createHitQueryRequest()` is only valid while the named authored hitbox is active. It emits the exact authored hitbox event plus caller context as a `collision-hit-query` request and marks Ability Fabric as **not** owning collision truth. An external collision/runtime system can return a hit or miss tied to the query receipt hash. `bindExternalHitResult()` verifies that binding, preserves the external source/receipt and contacts, and creates deterministic evidence without promoting the result into Ability-owned world truth. A mismatched or tampered query/result is rejected.
+
+`createHitConsequenceRequests()` consumes only a verified hit-result binding. The caller supplies an explicit `actionInstanceId`, structured consequence specs (`damage`, `status`, or `world-change`), and optionally application keys it has already persisted. Each verified target/contact becomes a target-specific request tied to the hit-result receipt and collision-query hash. Duplicate contact+consequence pairs are suppressed within the batch, and repeated collision samples for the same action can be suppressed when the caller feeds prior application keys back in. Ability Fabric remains stateless here: it emits requests and application keys but does not persist the ledger or apply damage/status/world mutations.
+
+The package root resolves through `src/api.mjs`, which re-exports the original ability API plus the hit-consequence request builder.
 
 ## Donor provenance
 
@@ -53,4 +60,4 @@ node examples/ground-slam.mjs
 
 ## Truth boundary
 
-Ability Fabric emits deterministic requests and evidence. It does not own durable world state, collision truth, collision-engine correctness, damage application, visual taste, balance, or game feel. A bound external hit result proves only that the supplied external receipt was structurally tied to the exact emitted query; it does not independently prove the external collision system was correct.
+Ability Fabric emits deterministic requests and evidence. It does not own durable world state, collision truth, collision-engine correctness, application-ledger persistence, damage application, status application, visual taste, balance, or game feel. A bound external hit result proves only that the supplied external receipt was structurally tied to the exact emitted query; it does not independently prove the external collision system was correct. A consequence batch proves only which requests and suppression keys were deterministically derived from supplied verified hit evidence and supplied consequence specs; the consuming game/world system still owns durable application and must decide/persist what was actually applied.
