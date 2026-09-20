@@ -6,9 +6,10 @@ Standalone deterministic gameplay-ability authoring specialist for AXM.
 
 Ability Fabric owns **what a game action does through time**. A single ability can coordinate animation, movement, hit volumes, projectiles, gameplay events, VFX, audio, camera impulses, physics requests, resources, interruption/cancel windows, and cooldowns without owning durable world truth.
 
-Canonical output:
+Canonical outputs:
 
 - `axm.game-ability-package/v1`
+- `axm.game-ability-cancel-decision/v1`
 
 The earlier donor contract `axm.ability-rules/v1` remains a provenance/input compatibility target.
 
@@ -24,8 +25,12 @@ The earlier donor contract `axm.ability-rules/v1` remains a provenance/input com
 - camera impulses
 - physics/world-change requests
 - resource/cooldown declarations
-- interrupt and cancel windows
+- interval-based active hit/hurt windows
+- target-aware interruption/cancel windows
+- deterministic cancel decisions that emit bounded interruption requests
 - exact replay receipts
+
+Cancel windows use half-open timing (`start <= t < end`). A window may optionally declare `into: [abilityId, ...]` to restrict which follow-up abilities it authorizes. `createCancelDecision()` turns that authored policy into an inspectable deterministic decision and, when allowed, emits an `ability-interrupt` request containing the exact interruption time. Animation/VFX/audio runtimes remain responsible for realizing that request; Ability Fabric does not directly mutate them.
 
 ## Donor provenance
 
@@ -42,4 +47,4 @@ node examples/ground-slam.mjs
 
 ## Truth boundary
 
-Ability Fabric emits deterministic requests and evidence. It does not own durable world state, decide visual taste, prove balance, or claim that an ability feels good merely because the event graph is valid.
+Ability Fabric emits deterministic requests and evidence. It does not own durable world state, decide visual taste, prove balance, prove engine collision correctness, or claim that an ability feels good merely because the event graph and cancel policy are valid.
