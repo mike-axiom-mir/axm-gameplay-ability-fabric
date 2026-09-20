@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 export const SCHEMA = "axm.game-ability-package/v1";
 export const CANCEL_DECISION_SCHEMA = "axm.game-ability-cancel-decision/v1";
+export const HIT_QUERY_SCHEMA = "axm.game-ability-hit-query/v1";
+export const HIT_RESULT_BINDING_SCHEMA = "axm.game-ability-hit-result-binding/v1";
 
 export const TRACK_TYPES = Object.freeze([
   "animation",
@@ -31,6 +33,10 @@ export function digest(value) {
 
 function finite(n, label) {
   if (!Number.isFinite(n)) throw new Error(label + " must be finite");
+}
+
+function nonEmptyString(value, label) {
+  if (typeof value !== "string" || value.length === 0) throw new Error(label + " must be a non-empty string");
 }
 
 function normalizeTypes(types) {
@@ -186,6 +192,105 @@ export function createCancelDecision(ability, time, { targetAbilityId = null } =
     authority: {
       durableWorldStateOwner: false,
       emitsRequestOnly: true
+    }
+  };
+
+  return {
+    ...body,
+    receipt: {
+      sha256: digest(body),
+      deterministic: true
+    }
+  };
+}
+
+export function createHitQueryRequest(ability, time, { hitboxEventId, queryId = null, context = {} } = {}) {
+  validateAbility(ability);
+  finite(time, "time");
+  nonEmptyString(hitboxEventId, "hitboxEventId");
+  if (queryId != null) nonEmptyString(queryId, "queryId");
+  if (!context || typeof context !== "object" || Array.isArray(context)) throw new Error("context must be an object");
+  if (time < 0 || time > ability.duration) throw new Error("query time must be inside ability");
+
+  const activeHitbox = activeWindowEventsAt(ability, time, { types: "hitbox" })
+    .find(event => event.id === hitboxEventId);
+  if (!activeHitbox) throw new Error("hitbox is not active at query time: " + hitboxEventId);
+
+  const resolvedQueryId = queryId ?? `${ability.id}:${hitboxEventId}:${time}`;
+  const body = {
+    schema: HIT_QUERY_SCHEMA,
+    queryId: resolvedQueryId,
+    abilityId: ability.id,
+    time,
+    hitboxEventId,
+    request: {
+      type: "collision-hit-query",
+      queryId: resolvedQueryId,
+      abilityId: ability.id,
+      sampleTime: time,
+      hitboxEvent: structuredClone(activeHitbox),
+      context: structuredClone(context)
+    },
+    authority: {
+      collisionTruthOwner: false,
+      durableWorldStateOwner: false,
+      emitsRequestOnly: true
+    }
+  };
+
+  return {
+    ...body,
+    receipt: {
+      sha256: digest(body),
+      deterministic: true
+    }
+  };
+}
+
+export function bindExternalHitResult(query, externalResult) {
+  if (!query || query.schema !== HIT_QUERY_SCHEMA) throw new Error("valid hit query required");
+  if (!query.receipt || typeof query.receipt.sha256 !== "string") throw new Error("hit query receipt required");
+  const { receipt: queryReceipt, ...queryBody } = query;
+  if (digest(queryBody) !== queryReceipt.sha256) throw new Error("hit query receipt mismatch");
+
+  if (!externalResult || typeof externalResult !== "object" || Array.isArray(externalResult)) {
+    throw new Error("externalResult must be an object");
+  }
+  nonEmptyString(externalResult.requestSha256, "externalResult.requestSha256");
+  if (externalResult.requestSha256 !== queryReceipt.sha256) throw new Error("external result does not bind to hit query");
+  if (typeof externalResult.hit !== "boolean") throw new Error("externalResult.hit must be boolean");
+  if (externalResult.contacts != null && !Array.isArray(externalResult.contacts)) throw new Error("externalResult.contacts must be an array when present");
+  if (!externalResult.source || typeof externalResult.source !== "object" || Array.isArray(externalResult.source)) {
+    throw new Error("externalResult.source must be an object");
+  }
+  nonEmptyString(externalResult.source.system, "externalResult.source.system");
+  if (externalResult.source.receipt != null && typeof externalResult.source.receipt !== "string") {
+    throw new Error("externalResult.source.receipt must be a string when present");
+  }
+
+  const external = {
+    requestSha256: externalResult.requestSha256,
+    hit: externalResult.hit,
+    contacts: structuredClone(externalResult.contacts ?? []),
+    source: {
+      system: externalResult.source.system,
+      receipt: externalResult.source.receipt ?? null
+    }
+  };
+  const body = {
+    schema: HIT_RESULT_BINDING_SCHEMA,
+    queryId: query.queryId,
+    abilityId: query.abilityId,
+    hitboxEventId: query.hitboxEventId,
+    sampleTime: query.time,
+    querySha256: queryReceipt.sha256,
+    hit: external.hit,
+    contacts: structuredClone(external.contacts),
+    external,
+    authority: {
+      collisionTruthOwner: false,
+      durableWorldStateOwner: false,
+      consumesExternalCollisionReceipt: true
     }
   };
 

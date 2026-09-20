@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { activeCancelWindowsAt, activeWindowEventsAt, compileTimeline, compileWindowEdges, createAbilityPackage, createCancelDecision, eventsBetween, phaseAt } from "../src/index.mjs";
+import { activeCancelWindowsAt, activeWindowEventsAt, bindExternalHitResult, compileTimeline, compileWindowEdges, createAbilityPackage, createCancelDecision, createHitQueryRequest, eventsBetween, phaseAt } from "../src/index.mjs";
 
 const ability = {
   id: "dash-strike",
@@ -21,7 +21,7 @@ const ability = {
       { id: "dash", time: 0.18, distance: 4 }
     ]},
     { id: "hit", type: "hitbox", events: [
-      { id: "blade", time: 0.22, endTime: 0.29, damage: 25 }
+      { id: "blade", time: 0.22, endTime: 0.29, damage: 25, socket: "weapon-tip", shape: { type: "capsule", radius: 0.4, halfHeight: 0.7 } }
     ]},
     { id: "hurt", type: "hurtbox", events: [
       { id: "arm-vulnerable", time: 0.18, endTime: 0.31, region: "arm" }
@@ -85,8 +85,59 @@ const outsideAbility = createCancelDecision(ability, 0.9, { targetAbilityId: "da
 assert.equal(outsideAbility.allowed, false);
 assert.equal(outsideAbility.reason, "outside-ability");
 
+const hitQueryA = createHitQueryRequest(ability, 0.24, {
+  hitboxEventId: "blade",
+  queryId: "dash-strike-hit-001",
+  context: { attackerId: "player-1", candidateSet: "nearby-enemies-frame-42" }
+});
+const hitQueryB = createHitQueryRequest(ability, 0.24, {
+  hitboxEventId: "blade",
+  queryId: "dash-strike-hit-001",
+  context: { attackerId: "player-1", candidateSet: "nearby-enemies-frame-42" }
+});
+assert.equal(hitQueryA.receipt.sha256, hitQueryB.receipt.sha256);
+assert.equal(hitQueryA.request.type, "collision-hit-query");
+assert.equal(hitQueryA.request.hitboxEvent.id, "blade");
+assert.deepEqual(hitQueryA.request.hitboxEvent.shape, { type: "capsule", radius: 0.4, halfHeight: 0.7 });
+assert.equal(hitQueryA.authority.collisionTruthOwner, false);
+assert.equal(hitQueryA.authority.durableWorldStateOwner, false);
+
+const externalHit = {
+  requestSha256: hitQueryA.receipt.sha256,
+  hit: true,
+  contacts: [{ targetId: "enemy-7", contactId: "contact-17", point: [1.2, 0.5, -0.2] }],
+  source: { system: "example-collision-runtime", receipt: "collision-frame-42:17" }
+};
+const boundHitA = bindExternalHitResult(hitQueryA, externalHit);
+const boundHitB = bindExternalHitResult(hitQueryA, externalHit);
+assert.equal(boundHitA.hit, true);
+assert.equal(boundHitA.contacts[0].targetId, "enemy-7");
+assert.equal(boundHitA.external.source.system, "example-collision-runtime");
+assert.equal(boundHitA.authority.collisionTruthOwner, false);
+assert.equal(boundHitA.authority.durableWorldStateOwner, false);
+assert.equal(boundHitA.authority.consumesExternalCollisionReceipt, true);
+assert.equal(boundHitA.receipt.sha256, boundHitB.receipt.sha256);
+
+const boundMiss = bindExternalHitResult(hitQueryA, {
+  requestSha256: hitQueryA.receipt.sha256,
+  hit: false,
+  contacts: [],
+  source: { system: "example-collision-runtime", receipt: "collision-frame-42:18" }
+});
+assert.equal(boundMiss.hit, false);
+assert.deepEqual(boundMiss.contacts, []);
+
+assert.throws(() => createHitQueryRequest(ability, 0.3, { hitboxEventId: "blade" }), /not active/);
+assert.throws(() => createHitQueryRequest(ability, 0.24, { hitboxEventId: "missing" }), /not active/);
+assert.throws(() => createHitQueryRequest(ability, 0.24, { hitboxEventId: "blade", context: [] }), /context/);
+assert.throws(() => bindExternalHitResult(hitQueryA, { ...externalHit, requestSha256: "wrong-query" }), /does not bind/);
+assert.throws(() => bindExternalHitResult({ ...hitQueryA, request: { ...hitQueryA.request, sampleTime: 0.25 } }, externalHit), /receipt mismatch/);
+assert.throws(() => bindExternalHitResult(hitQueryA, { ...externalHit, hit: "yes" }), /must be boolean/);
+assert.throws(() => bindExternalHitResult(hitQueryA, { ...externalHit, contacts: {} }), /contacts must be an array/);
+assert.throws(() => bindExternalHitResult(hitQueryA, { ...externalHit, source: { system: "" } }), /non-empty string/);
+
 assert.throws(() => createAbilityPackage({...ability, tracks:[{id:"bad",type:"magic",events:[]}]}));
 assert.throws(() => createAbilityPackage({...ability, tracks:[{id:"bad-window",type:"hitbox",events:[{id:"bad",time:0.3,endTime:0.2}]}]}));
 assert.throws(() => createAbilityPackage({...ability, cancelWindows:[{id:"bad-cancel",start:0.4,end:0.6,into:[]}]}));
 assert.throws(() => createCancelDecision(ability, 0.6, { targetAbilityId: "" }));
-console.log("PASS gameplay-ability-fabric selftest", a.receipt.sha256, cancelA.receipt.sha256);
+console.log("PASS gameplay-ability-fabric selftest", a.receipt.sha256, cancelA.receipt.sha256, boundHitA.receipt.sha256);

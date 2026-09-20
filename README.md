@@ -10,6 +10,8 @@ Canonical outputs:
 
 - `axm.game-ability-package/v1`
 - `axm.game-ability-cancel-decision/v1`
+- `axm.game-ability-hit-query/v1`
+- `axm.game-ability-hit-result-binding/v1`
 
 The earlier donor contract `axm.ability-rules/v1` remains a provenance/input compatibility target.
 
@@ -28,9 +30,13 @@ The earlier donor contract `axm.ability-rules/v1` remains a provenance/input com
 - interval-based active hit/hurt windows
 - target-aware interruption/cancel windows
 - deterministic cancel decisions that emit bounded interruption requests
+- active-hitbox collision query requests with deterministic receipts
+- external collision hit/miss receipt binding without taking collision authority
 - exact replay receipts
 
 Cancel windows use half-open timing (`start <= t < end`). A window may optionally declare `into: [abilityId, ...]` to restrict which follow-up abilities it authorizes. `createCancelDecision()` turns that authored policy into an inspectable deterministic decision and, when allowed, emits an `ability-interrupt` request containing the exact interruption time. Animation/VFX/audio runtimes remain responsible for realizing that request; Ability Fabric does not directly mutate them.
+
+`createHitQueryRequest()` is only valid while the named authored hitbox is active. It emits the exact authored hitbox event plus caller context as a `collision-hit-query` request and marks Ability Fabric as **not** owning collision truth. An external collision/runtime system can return a hit or miss tied to the query receipt hash. `bindExternalHitResult()` verifies that binding, preserves the external source/receipt and contacts, and creates deterministic evidence without promoting the result into Ability-owned world truth. A mismatched or tampered query/result is rejected.
 
 ## Donor provenance
 
@@ -47,4 +53,4 @@ node examples/ground-slam.mjs
 
 ## Truth boundary
 
-Ability Fabric emits deterministic requests and evidence. It does not own durable world state, decide visual taste, prove balance, prove engine collision correctness, or claim that an ability feels good merely because the event graph and cancel policy are valid.
+Ability Fabric emits deterministic requests and evidence. It does not own durable world state, collision truth, collision-engine correctness, damage application, visual taste, balance, or game feel. A bound external hit result proves only that the supplied external receipt was structurally tied to the exact emitted query; it does not independently prove the external collision system was correct.
