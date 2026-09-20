@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "./src/api.mjs",
   "scripts": {
-    "test": "node tests/selftest.mjs && node tests/vfx-integration.mjs"
+    "test": "node tests/selftest.mjs && node tests/hit-consequence.mjs && node tests/vfx-integration.mjs"
   }
 }
