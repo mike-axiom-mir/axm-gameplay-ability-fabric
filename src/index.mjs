@@ -32,6 +32,15 @@ function finite(n, label) {
   if (!Number.isFinite(n)) throw new Error(label + " must be finite");
 }
 
+function normalizeTypes(types) {
+  if (types == null) return null;
+  const list = Array.isArray(types) ? types : [types];
+  for (const type of list) {
+    if (!TRACK_TYPES.includes(type)) throw new Error("unknown track type: " + type);
+  }
+  return new Set(list);
+}
+
 export function validateAbility(ability) {
   if (!ability?.id) throw new Error("ability.id required");
   finite(ability.duration, "ability.duration");
@@ -57,6 +66,12 @@ export function validateAbility(ability) {
       if (event.time < 0 || event.time > ability.duration || event.time < previous) {
         throw new Error("events must be ordered and inside ability");
       }
+      if (event.endTime != null) {
+        finite(event.endTime, "event.endTime");
+        if (event.endTime <= event.time || event.endTime > ability.duration) {
+          throw new Error("event.endTime must be after event.time and inside ability");
+        }
+      }
       previous = event.time;
     }
   }
@@ -80,12 +95,42 @@ export function validateAbility(ability) {
 export function compileTimeline(ability) {
   validateAbility(ability);
   return (ability.tracks || [])
-    .flatMap(track => (track.events || []).map(event => ({
+    .flatMap((track, trackIndex) => (track.events || []).map((event, eventIndex) => ({
       ...structuredClone(event),
       track: track.id,
-      type: track.type
+      type: track.type,
+      __trackIndex: trackIndex,
+      __eventIndex: eventIndex
     })))
-    .sort((a, b) => a.time - b.time || a.track.localeCompare(b.track) || a.id.localeCompare(b.id));
+    .sort((a, b) => a.time - b.time || a.__trackIndex - b.__trackIndex || a.__eventIndex - b.__eventIndex)
+    .map(({ __trackIndex, __eventIndex, ...event }) => event);
+}
+
+export function compileWindowEdges(ability, { types = null } = {}) {
+  const allowed = normalizeTypes(types);
+  const edges = compileTimeline(ability)
+    .filter(event => event.endTime != null && (!allowed || allowed.has(event.type)))
+    .flatMap((event, eventOrder) => [
+      { time: event.time, edge: "open", id: event.id, track: event.track, type: event.type, __eventOrder: eventOrder },
+      { time: event.endTime, edge: "close", id: event.id, track: event.track, type: event.type, __eventOrder: eventOrder }
+    ]);
+  const rank = { close: 0, open: 1 };
+  return edges
+    .sort((a, b) => a.time - b.time || rank[a.edge] - rank[b.edge] || a.__eventOrder - b.__eventOrder)
+    .map(({ __eventOrder, ...edge }) => edge);
+}
+
+export function activeWindowEventsAt(ability, time, { types = null } = {}) {
+  validateAbility(ability);
+  finite(time, "time");
+  const allowed = normalizeTypes(types);
+  const t = Math.max(0, Math.min(ability.duration, time));
+  return compileTimeline(ability).filter(event =>
+    event.endTime != null &&
+    event.time <= t &&
+    t < event.endTime &&
+    (!allowed || allowed.has(event.type))
+  );
 }
 
 export function phaseAt(ability, time) {
