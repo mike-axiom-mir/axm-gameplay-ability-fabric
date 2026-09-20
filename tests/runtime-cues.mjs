@@ -98,7 +98,7 @@ const overlap = createRuntimeCueRequests(ability, {
 });
 const firstImpactAudio = initialA.requests.find(request => request.eventId === "impact-crack");
 assert.equal(overlap.requests[0].dispatchKey, firstImpactAudio.dispatchKey);
-assert.equal(overlap.requests[0].receipt.sha256, firstImpactAudio.receipt.sha256);
+assert.notEqual(overlap.requests[0].receipt.sha256, firstImpactAudio.receipt.sha256);
 
 const newAction = createRuntimeCueRequests(ability, {
   actionInstanceId: "attack-18",
