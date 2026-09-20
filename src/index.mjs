@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 export const SCHEMA = "axm.game-ability-package/v1";
+export const CANCEL_DECISION_SCHEMA = "axm.game-ability-cancel-decision/v1";
 
 export const TRACK_TYPES = Object.freeze([
   "animation",
@@ -87,6 +88,11 @@ export function validateAbility(ability) {
     if (window.start < 0 || window.end <= window.start || window.end > ability.duration) {
       throw new Error("invalid cancel window");
     }
+    if (window.into != null) {
+      if (!Array.isArray(window.into) || window.into.length === 0 || window.into.some(id => typeof id !== "string" || id.length === 0)) {
+        throw new Error("cancel.into must be a non-empty array of ability ids");
+      }
+    }
   }
 
   return true;
@@ -131,6 +137,65 @@ export function activeWindowEventsAt(ability, time, { types = null } = {}) {
     t < event.endTime &&
     (!allowed || allowed.has(event.type))
   );
+}
+
+export function activeCancelWindowsAt(ability, time) {
+  validateAbility(ability);
+  finite(time, "time");
+  if (time < 0 || time > ability.duration) return [];
+  return (ability.cancelWindows || [])
+    .filter(window => window.start <= time && time < window.end)
+    .map(window => structuredClone(window));
+}
+
+export function createCancelDecision(ability, time, { targetAbilityId = null } = {}) {
+  validateAbility(ability);
+  finite(time, "time");
+  if (targetAbilityId != null && (typeof targetAbilityId !== "string" || targetAbilityId.length === 0)) {
+    throw new Error("targetAbilityId must be a non-empty string or null");
+  }
+
+  const activeWindows = activeCancelWindowsAt(ability, time);
+  const eligibleWindows = activeWindows.filter(window =>
+    window.into == null || (targetAbilityId != null && window.into.includes(targetAbilityId))
+  );
+
+  let reason = "cancel-window-open";
+  if (time < 0 || time > ability.duration) reason = "outside-ability";
+  else if (activeWindows.length === 0) reason = "outside-cancel-window";
+  else if (eligibleWindows.length === 0 && targetAbilityId == null && activeWindows.some(window => window.into != null)) reason = "target-required";
+  else if (eligibleWindows.length === 0) reason = "target-not-allowed";
+
+  const selected = eligibleWindows[0] || null;
+  const allowed = selected != null;
+  const body = {
+    schema: CANCEL_DECISION_SCHEMA,
+    abilityId: ability.id,
+    time,
+    targetAbilityId,
+    allowed,
+    reason: allowed ? "cancel-window-open" : reason,
+    windowId: selected?.id ?? null,
+    activeWindowIds: activeWindows.map(window => window.id ?? null),
+    request: allowed ? {
+      type: "ability-interrupt",
+      abilityId: ability.id,
+      interruptAt: time,
+      nextAbilityId: targetAbilityId
+    } : null,
+    authority: {
+      durableWorldStateOwner: false,
+      emitsRequestOnly: true
+    }
+  };
+
+  return {
+    ...body,
+    receipt: {
+      sha256: digest(body),
+      deterministic: true
+    }
+  };
 }
 
 export function phaseAt(ability, time) {
