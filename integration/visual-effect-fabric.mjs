@@ -2,9 +2,15 @@ import { compileTimeline } from "../src/index.mjs";
 
 export const GAME_VFX_REQUEST_SCHEMA = "axm.game-vfx-request/v1";
 
-export function emitGameVfxRequests(ability) {
+function finite(value, label) {
+  if (!Number.isFinite(value)) throw new Error(label + " must be finite");
+}
+
+export function emitGameVfxRequests(ability, { throughTime = ability.duration } = {}) {
+  finite(throughTime, "throughTime");
+
   return compileTimeline(ability)
-    .filter(event => event.type === "vfx")
+    .filter(event => event.type === "vfx" && event.time <= throughTime)
     .map(event => {
       const spec = event.vfx ?? {};
       if (!spec.kind) throw new Error("VFX event " + event.id + " requires vfx.kind");
