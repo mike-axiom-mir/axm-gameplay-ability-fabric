@@ -5,6 +5,6 @@
   "type": "module",
   "main": "./src/api.mjs",
   "scripts": {
-    "test": "node tests/selftest.mjs && node tests/hit-consequence.mjs && node tests/vfx-integration.mjs && node tests/runtime-cues.mjs"
+    "test": "node tests/selftest.mjs && node tests/hit-consequence.mjs && node tests/vfx-integration.mjs && node tests/runtime-cues.mjs && node tests/retimed-ability.mjs"
   }
 }

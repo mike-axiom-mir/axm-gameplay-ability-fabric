@@ -16,6 +16,7 @@ Canonical outputs:
 - `axm.game-ability-runtime-cue-request/v1`
 - `axm.game-ability-runtime-cue-batch/v1`
 - `axm.game-ability-runtime-cue-receipt-binding/v1`
+- `axm.game-ability-retimed-timeline/v1`
 
 The earlier donor contract `axm.ability-rules/v1` remains a provenance/input compatibility target.
 
@@ -41,6 +42,8 @@ The earlier donor contract `axm.ability-rules/v1` remains a provenance/input com
 - deterministic audio/camera/physics runtime-cue requests over an explicit advancement interval
 - stable per-action dispatch keys for replay/deduplication by external consumers
 - external runtime receipt binding that preserves accepted/executed/rejected/cancelled status without claiming execution truth
+- animation-transform-bound derivation of synchronized retimed phases, hit windows, cancel windows, and timeline cues
+- explicit cooldown retiming policy (`preserve` by default, `scale` only when requested)
 - exact replay receipts
 
 Cancel windows use half-open timing (`start <= t < end`). A window may optionally declare `into: [abilityId, ...]` to restrict which follow-up abilities it authorizes. `createCancelDecision()` turns that authored policy into an inspectable deterministic decision and, when allowed, emits an `ability-interrupt` request containing the exact interruption time. Animation/VFX/audio runtimes remain responsible for realizing that request; Ability Fabric does not directly mutate them.
@@ -53,7 +56,9 @@ Cancel windows use half-open timing (`start <= t < end`). A window may optionall
 
 `bindExternalRuntimeCueReceipt()` verifies that an external receipt binds to the exact cue request receipt and dispatch key, then preserves the external system identity and its reported `accepted`, `executed`, `rejected`, or `cancelled` status. The binding is evidence plumbing only: Ability Fabric does not independently prove that an audio, camera, or physics runtime actually performed the effect it reported.
 
-The package root resolves through `src/api.mjs`, which re-exports the original ability API, hit-consequence request builder, and runtime-cue boundary.
+`deriveRetimedAbilityTimeline()` consumes an external `axm.animation-time-transform/v1` receipt and requires its source duration to match the authored ability duration. It derives a new ability identity whose in-action timing is uniformly mapped onto the retimed animation: phase edges, event times, event end-times, and cancel windows move together. The derivation carries the exact animation transform, source/derived ability hashes, and an inspectable timing map. Cooldown is deliberately not silently coupled to animation speed: `cooldownPolicy: "preserve"` is the default, while `"scale"` is an explicit gameplay decision. Ability Fabric validates the Animation timing evidence structurally but does not become the animation timing authority.
+
+The package root resolves through `src/api.mjs`, which re-exports the original ability API, hit-consequence request builder, runtime-cue boundary, and retimed-gameplay timeline derivation.
 
 ## Donor provenance
 
@@ -70,4 +75,4 @@ node examples/ground-slam.mjs
 
 ## Truth boundary
 
-Ability Fabric emits deterministic requests and evidence. It does not own durable world state, collision truth, collision-engine correctness, application-ledger persistence, damage application, status application, audio/camera/physics runtime execution truth, runtime dispatch-ledger persistence, visual taste, balance, or game feel. A bound external hit result proves only that the supplied external receipt was structurally tied to the exact emitted query; it does not independently prove the external collision system was correct. A consequence batch proves only which requests and suppression keys were deterministically derived from supplied verified hit evidence and supplied consequence specs; the consuming game/world system still owns durable application and must decide/persist what was actually applied. A runtime-cue receipt binding proves only that supplied external evidence was structurally tied to the exact emitted cue request and dispatch key; it does not independently prove the external runtime performed the reported effect correctly or with acceptable quality.
+Ability Fabric emits deterministic requests and evidence. It does not own durable world state, collision truth, collision-engine correctness, application-ledger persistence, damage application, status application, animation timing authority, audio/camera/physics runtime execution truth, runtime dispatch-ledger persistence, visual taste, balance, or game feel. A bound external hit result proves only that the supplied external receipt was structurally tied to the exact emitted query; it does not independently prove the external collision system was correct. A consequence batch proves only which requests and suppression keys were deterministically derived from supplied verified hit evidence and supplied consequence specs; the consuming game/world system still owns durable application and must decide/persist what was actually applied. A runtime-cue receipt binding proves only that supplied external evidence was structurally tied to the exact emitted cue request and dispatch key; it does not independently prove the external runtime performed the reported effect correctly or with acceptable quality. A retimed ability artifact proves only that authored in-action timings were deterministically derived from the supplied, receipt-valid Animation time transform under an explicit cooldown policy; it does not prove that the Animation transform came from a visually correct clip, that the resulting action is balanced, or that it feels good in a real game.
